@@ -465,35 +465,26 @@ let tempSensors = [];
 let humiditySensors = [];
 
 // ── AUTH TOKEN ──
+// Im HA iframe läuft die Seite unter dem HA-Session-Cookie,
+// daher reicht credentials:'include' – kein Bearer Token nötig.
 function getToken() {
-  try {
-    const meta = document.cookie.split(';').find(c => c.trim().startsWith('ingress_token='));
-    if (meta) return meta.split('=')[1].trim();
-  } catch {}
-  // Fallback: aus URL-Parameter oder localStorage
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('token')) return params.get('token');
-  return localStorage.getItem('ha_token') || '';
+  return null; // HA iframe nutzt Session-Cookie automatisch
 }
 
 // ── LOAD SENSORS FROM HA ──
 async function loadSensors() {
   try {
-    const token = getToken();
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const res = await fetch('/api/states', { headers, credentials: 'include' });
+    const res = await fetch('/api/states', { credentials: 'include' });
     if (!res.ok) throw new Error(res.status);
     const states = await res.json();
 
     tempSensors = states
-      .filter(s => s.attributes.device_class === 'temperature' || 
-                   (s.entity_id.startsWith('sensor.') && s.entity_id.includes('temp')))
+      .filter(s => s.attributes.device_class === 'temperature')
       .map(s => ({ id: s.entity_id, name: s.attributes.friendly_name || s.entity_id, state: s.state, unit: s.attributes.unit_of_measurement || '°C' }))
       .sort((a,b) => a.name.localeCompare(b.name));
 
     humiditySensors = states
-      .filter(s => s.attributes.device_class === 'humidity' ||
-                   (s.entity_id.startsWith('sensor.') && s.entity_id.includes('humid')))
+      .filter(s => s.attributes.device_class === 'humidity')
       .map(s => ({ id: s.entity_id, name: s.attributes.friendly_name || s.entity_id, state: s.state, unit: s.attributes.unit_of_measurement || '%' }))
       .sort((a,b) => a.name.localeCompare(b.name));
 
@@ -506,9 +497,7 @@ async function loadSensors() {
 // ── LOAD SAVED RULES FROM HA STATE ──
 async function loadRules() {
   try {
-    const token = getToken();
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const res = await fetch('/api/states/lueftung.rules_state', { headers, credentials: 'include' });
+    const res = await fetch('/api/states/lueftung.rules_state', { credentials: 'include' });
     if (res.ok) {
       const data = await res.json();
       if (data.attributes && data.attributes.temp_rules !== undefined) {
@@ -557,9 +546,7 @@ function renderRule(type, rule, idx) {
   const areaChips = Array.from({length: NUM_AREAS}, (_, i) => {
     const a = i + 1;
     const sel = (rule.areas || []).includes(a) ? 'selected' : '';
-    return `<label class="area-chip ${sel}" onclick="toggleArea('${type}',${idx},${a},this)">
-      <input type="checkbox" ${sel ? 'checked' : ''}> Bereich ${a}
-    </label>`;
+    return `<div class="area-chip ${sel}" onclick="toggleArea('${type}',${idx},${a},this)">Bereich ${a}</div>`;
   }).join('');
 
   return `
@@ -643,9 +630,7 @@ function renderAll() {
   nightChips.innerHTML = Array.from({length: NUM_AREAS}, (_, i) => {
     const a = i + 1;
     const sel = (nm.areas || []).includes(a) ? 'selected' : '';
-    return `<label class="area-chip ${sel}" onclick="toggleNightArea(${a}, this)">
-      <input type="checkbox" ${sel ? 'checked' : ''}> Bereich ${a}
-    </label>`;
+    return `<div class="area-chip ${sel}" onclick="toggleNightArea(${a}, this)">Bereich ${a}</div>`;
   }).join('');
 }
 
@@ -717,14 +702,9 @@ async function saveRules() {
   btn.textContent = '⏳ Speichern...';
 
   try {
-    const token = getToken();
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    };
     const res = await fetch('/api/services/lueftung/save_rules', {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(rules)
     });
