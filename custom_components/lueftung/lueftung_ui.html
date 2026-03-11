@@ -465,16 +465,60 @@ let tempSensors = [];
 let humiditySensors = [];
 
 // ── AUTH TOKEN ──
-// Im HA iframe läuft die Seite unter dem HA-Session-Cookie,
-// daher reicht credentials:'include' – kein Bearer Token nötig.
-function getToken() {
-  return null; // HA iframe nutzt Session-Cookie automatisch
+// Versucht den Token aus dem HA Parent-Frame zu holen
+async function getToken() {
+  // Methode 1: HA stellt Token über postMessage bereit
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(null), 2000);
+    window.addEventListener('message', function handler(e) {
+      if (e.data && e.data.type === 'auth/token') {
+        clearTimeout(timeout);
+        window.removeEventListener('message', handler);
+        resolve(e.data.token);
+      }
+    });
+    try {
+      window.parent.postMessage({ type: 'auth/token' }, '*');
+    } catch {
+      clearTimeout(timeout);
+      resolve(null);
+    }
+  });
+}
+
+// Token direkt aus HA parent hassConnection lesen
+function getTokenSync() {
+  // Zuerst gespeicherten Token prüfen
+  const stored = sessionStorage.getItem('ha_lueftung_token');
+  if (stored) return stored;
+  try {
+    return window.parent?.hassConnection?._conn?.__auth?.accessToken ||
+           window.parent?.hassConnection?.auth?.data?.access_token ||
+           window.parent?.document?.querySelector('home-assistant')?.__hass?.auth?.data?.access_token ||
+           null;
+  } catch { return null; }
 }
 
 // ── LOAD SENSORS FROM HA ──
 async function loadSensors() {
   try {
-    const res = await fetch('/api/states', { credentials: 'include' });
+    // Token holen – zuerst sync, dann async als Fallback
+    let token = getTokenSync();
+    if (!token) token = await getToken();
+
+    const headers = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
+
+    const res = await fetch('/api/states', {
+      headers,
+      credentials: 'include'
+    });
+
+    if (res.status === 401) {
+      showToast('⚠️ Keine Berechtigung – bitte HA neu laden', 'error');
+      return;
+    }
     if (!res.ok) throw new Error(res.status);
     const states = await res.json();
 
@@ -488,6 +532,10 @@ async function loadSensors() {
       .map(s => ({ id: s.entity_id, name: s.attributes.friendly_name || s.entity_id, state: s.state, unit: s.attributes.unit_of_measurement || '%' }))
       .sort((a,b) => a.name.localeCompare(b.name));
 
+    if (tempSensors.length === 0 && humiditySensors.length === 0) {
+      showToast('Keine Temperatur/Feuchtigkeitssensoren gefunden', 'error');
+    }
+
   } catch(e) {
     console.warn('Sensoren konnten nicht geladen werden:', e);
     showToast('Sensoren konnten nicht geladen werden – bitte Seite neu laden', 'error');
@@ -497,7 +545,10 @@ async function loadSensors() {
 // ── LOAD SAVED RULES FROM HA STATE ──
 async function loadRules() {
   try {
-    const res = await fetch('/api/states/lueftung.rules_state', { credentials: 'include' });
+    let token = getTokenSync();
+    if (!token) token = await getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await fetch('/api/states/lueftung.rules_state', { headers, credentials: 'include' });
     if (res.ok) {
       const data = await res.json();
       if (data.attributes && data.attributes.temp_rules !== undefined) {
@@ -702,9 +753,15 @@ async function saveRules() {
   btn.textContent = '⏳ Speichern...';
 
   try {
+    let token = getTokenSync();
+    if (!token) token = await getToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    };
     const res = await fetch('/api/services/lueftung/save_rules', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify(rules)
     });
@@ -736,9 +793,47 @@ function escHtml(str) {
 async function init() {
   await Promise.all([loadSensors(), loadRules()]);
   renderAll();
+
+  // Falls immer noch keine Sensoren: Token-Eingabe anzeigen
+  if (tempSensors.length === 0 && humiditySensors.length === 0) {
+    showTokenDialog();
+  }
 }
 
-init();
+function showTokenDialog() {
+  const existing = document.getElementById('token-dialog');
+  if (existing) return;
+  const dialog = document.createElement('div');
+  dialog.id = 'token-dialog';
+  dialog.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;
+    display:flex;align-items:center;justify-content:center;padding:16px;
+  `;
+  dialog.innerHTML = `
+    <div style="background:white;border-radius:12px;padding:24px;max-width:480px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+      <h3 style="margin-bottom:8px;font-size:16px;font-weight:500">API-Zugang einrichten</h3>
+      <p style="font-size:13px;color:#757575;margin-bottom:16px">
+        Damit die Sensoren geladen werden können, wird ein Long-Lived Access Token benötigt.<br><br>
+        Erstellen unter: <b>Profil → Sicherheit → Langlebige Zugangsdaten → Token erstellen</b>
+      </p>
+      <input id="token-input" type="password" placeholder="Token hier einfügen"
+        style="width:100%;height:40px;padding:0 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:14px;margin-bottom:12px">
+      <button onclick="applyToken()"
+        style="width:100%;height:40px;background:#03a9f4;color:white;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer">
+        Token speichern & Sensoren laden
+      </button>
+    </div>`;
+  document.body.appendChild(dialog);
+}
+
+async function applyToken() {
+  const token = document.getElementById('token-input').value.trim();
+  if (!token) return;
+  sessionStorage.setItem('ha_lueftung_token', token);
+  document.getElementById('token-dialog')?.remove();
+  await Promise.all([loadSensors(), loadRules()]);
+  renderAll();
+}
 </script>
 </body>
 </html>
