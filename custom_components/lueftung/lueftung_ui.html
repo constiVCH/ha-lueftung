@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lüftungssteuerung</title>
+<style>
+  :root {
+    --bg: #f5f5f5;
+    --surface: #ffffff;
+    --surface-2: #fafafa;
+    --border: #e0e0e0;
+    --divider: #eeeeee;
+    --accent: #03a9f4;
+    --accent-dark: #0288d1;
+    --accent-light: #e1f5fe;
+    --success: #43a047;
+    --success-light: #e8f5e9;
+    --danger: #e53935;
+    --danger-light: #ffebee;
+    --warning: #fb8c00;
+    --text-primary: #212121;
+    --text-secondary: #757575;
+    --text-hint: #9e9e9e;
+    --shadow-1: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
+    --shadow-2: 0 2px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: "Roboto", "Noto", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  .app-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow-1);
+  }
+  .app-header ha-icon, .header-icon {
+    color: var(--accent);
+    font-size: 24px;
+  }
+  .app-title { font-size: 20px; font-weight: 400; color: var(--text-primary); flex: 1; }
+  .header-save-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 0 16px;
+    height: 36px;
+    border-radius: 18px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.2s, box-shadow 0.2s;
+    box-shadow: var(--shadow-1);
+    letter-spacing: 0.02em;
+  }
+  .header-save-btn:hover { background: var(--accent-dark); box-shadow: var(--shadow-2); }
+  .header-save-btn.saving { opacity: 0.7; pointer-events: none; }
+
+  /* ── TABS ── */
+  .tab-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    padding: 0 8px;
+  }
+  .tab-btn {
+    padding: 14px 16px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.2s, border-color 0.2s;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .tab-btn:hover { color: var(--accent); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── LAYOUT ── */
+  .page { padding: 16px; max-width: 960px; margin: 0 auto; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── HA CARD ── */
+  .ha-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-1);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 16px 16px 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .card-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  .card-subtitle {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+  .card-body { padding: 16px; }
+  .card-divider { height: 1px; background: var(--divider); margin: 0 16px; }
+
+  /* ── FORM FIELDS ── */
+  .field { margin-bottom: 16px; }
+  .field:last-child { margin-bottom: 0; }
+  .field-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .ha-input, .ha-select {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .ha-select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239e9e9e' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+    cursor: pointer;
+  }
+  .ha-input:focus, .ha-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(3,169,244,0.15);
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 580px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  /* ── TOGGLE SWITCH ── */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 40px;
+  }
+  .toggle-label { font-size: 14px; color: var(--text-primary); }
+  .toggle-switch { position: relative; width: 48px; height: 28px; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-track {
+    position: absolute;
+    inset: 0;
+    background: #bdbdbd;
+    border-radius: 28px;
+    transition: background 0.2s;
+    cursor: pointer;
+  }
+  .toggle-thumb {
+    position: absolute;
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    cursor: pointer;
+    pointer-events: none;
+  }
+  .toggle-switch input:checked ~ .toggle-track { background: var(--accent); }
+  .toggle-switch input:checked ~ .toggle-thumb { transform: translateX(20px); }
+
+  /* ── AREA CHIPS ── */
+  .chips-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+  .area-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--surface);
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .area-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .area-chip.selected {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    color: var(--accent-dark);
+  }
+  .area-chip input { display: none; }
+
+  /* ── RULE CARD ── */
+  .rule-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+  }
+  .rule-card:hover { box-shadow: var(--shadow-2); }
+  .rule-card-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--divider);
+  }
+  .rule-number {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--accent-light);
+    color: var(--accent-dark);
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .rule-name-input {
+    flex: 1;
+    height: 32px;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    padding: 0 4px;
+  }
+  .rule-name-input:focus { outline: none; border-bottom: 1px solid var(--accent); }
+  .rule-name-input::placeholder { color: var(--text-hint); font-weight: 400; }
+  .rule-card-body { padding: 16px; }
+
+  .icon-btn {
+    width: 36px; height: 36px;
+    border: none;
+    background: transparent;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: background 0.15s;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+  .icon-btn:hover { background: var(--divider); }
+  .icon-btn.danger:hover { background: var(--danger-light); color: var(--danger); }
+
+  /* ── ADD RULE BTN ── */
+  .add-rule-btn {
+    width: 100%;
+    padding: 12px;
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .add-rule-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-hint);
+  }
+  .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #323232;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    z-index: 999;
+    white-space: nowrap;
+    box-shadow: var(--shadow-2);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { background: var(--success); }
+  .toast.error { background: var(--danger); }
+
+  /* ── LOADING ── */
+  .loading { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 13px; padding: 8px 0; }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .section-hint { font-size: 12px; color: var(--text-hint); margin-bottom: 12px; }
+
+  /* Disabled state */
+  .rule-card.disabled { opacity: 0.6; }
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <span style="font-size:24px">🌀</span>
+  <span class="app-title">Lüftungssteuerung</span>
+  <button class="header-save-btn" id="save-btn" onclick="saveRules()">
+    <span>💾</span> Speichern
+  </button>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('temp', this)">🌡️ Temperatur</button>
+  <button class="tab-btn" onclick="switchTab('humidity', this)">💧 Feuchtigkeit</button>
+  <button class="tab-btn" onclick="switchTab('night', this)">🌙 Nachtmodus</button>
+</div>
+
+<div class="page">
+
+  <!-- TEMPERATUR -->
+  <div class="tab-panel active" id="tab-temp">
+    <div id="temp-list"></div>
+    <button class="add-rule-btn" onclick="addRule('temp')">＋ Temperatur-Regel hinzufügen</button>
+  </div>
+
+  <!-- FEUCHTIGKEIT -->
+  <div class="tab-panel" id="tab-humidity">
+    <div id="humidity-list"></div>
+    <button class="add-rule-btn" onclick="addRule('humidity')">＋ Feuchtigkeits-Regel hinzufügen</button>
+  </div>
+
+  <!-- NACHTMODUS -->
+  <div class="tab-panel" id="tab-night">
+    <div class="ha-card">
+      <div class="card-body">
+
+        <div class="field">
+          <div class="toggle-row">
+            <span class="toggle-label">Nachtmodus aktivieren</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="night-enabled">
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="card-divider" style="margin: 12px 0"></div>
+
+        <div class="grid-2 field">
+          <div>
+            <label class="field-label">Beginn</label>
+            <input type="time" class="ha-input" id="night-start" value="22:00">
+          </div>
+          <div>
+            <label class="field-label">Ende</label>
+            <input type="time" class="ha-input" id="night-end" value="07:00">
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">Lüftungsstufe im Nachtmodus</label>
+          <select class="ha-select" id="night-mode-select"></select>
+        </div>
+
+        <div class="field">
+          <label class="field-label">Betroffene Bereiche</label>
+          <div class="chips-wrap" id="night-areas-chips"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const MODES = ["Fans off","Manual 1","Manual 2","Manual 3","Manual 4","Manual 5","Manual 6","Boost ventilation","Humidity regulation","CO2 regulation","Timed program","Snooze","INACTIVE"];
+const MANUAL_MODES = ["Manual 1","Manual 2","Manual 3","Manual 4","Manual 5","Manual 6"];
+const NUM_AREAS = 6;
+
+let rules = {
+  temp_rules: [],
+  humidity_rules: [],
+  night_mode: { enabled: false, start: "22:00", end: "07:00", areas: [], mode: "Manual 1" }
+};
+
+let tempSensors = [];
+let humiditySensors = [];
+
+// ── AUTH TOKEN ──
+function getToken() {
+  try {
+    const meta = document.cookie.split(';').find(c => c.trim().startsWith('ingress_token='));
+    if (meta) return meta.split('=')[1].trim();
+  } catch {}
+  // Fallback: aus URL-Parameter oder localStorage
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('token')) return params.get('token');
+  return localStorage.getItem('ha_token') || '';
+}
+
+// ── LOAD SENSORS FROM HA ──
+async function loadSensors() {
+  try {
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await fetch('/api/states', { headers, credentials: 'include' });
+    if (!res.ok) throw new Error(res.status);
+    const states = await res.json();
+
+    tempSensors = states
+      .filter(s => s.attributes.device_class === 'temperature' || 
+                   (s.entity_id.startsWith('sensor.') && s.entity_id.includes('temp')))
+      .map(s => ({ id: s.entity_id, name: s.attributes.friendly_name || s.entity_id, state: s.state, unit: s.attributes.unit_of_measurement || '°C' }))
+      .sort((a,b) => a.name.localeCompare(b.name));
+
+    humiditySensors = states
+      .filter(s => s.attributes.device_class === 'humidity' ||
+                   (s.entity_id.startsWith('sensor.') && s.entity_id.includes('humid')))
+      .map(s => ({ id: s.entity_id, name: s.attributes.friendly_name || s.entity_id, state: s.state, unit: s.attributes.unit_of_measurement || '%' }))
+      .sort((a,b) => a.name.localeCompare(b.name));
+
+  } catch(e) {
+    console.warn('Sensoren konnten nicht geladen werden:', e);
+    showToast('Sensoren konnten nicht geladen werden – bitte Seite neu laden', 'error');
+  }
+}
+
+// ── LOAD SAVED RULES FROM HA STATE ──
+async function loadRules() {
+  try {
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await fetch('/api/states/lueftung.rules_state', { headers, credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.attributes && data.attributes.temp_rules !== undefined) {
+        rules = {
+          temp_rules: data.attributes.temp_rules || [],
+          humidity_rules: data.attributes.humidity_rules || [],
+          night_mode: data.attributes.night_mode || rules.night_mode
+        };
+      }
+    }
+  } catch(e) {
+    console.warn('Regeln konnten nicht geladen werden:', e);
+  }
+}
+
+// ── TAB SWITCHING ──
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+// ── SENSOR SELECT HTML ──
+function buildSensorOptions(sensors, selectedId) {
+  const opts = sensors.map(s =>
+    `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${s.name} (${s.state} ${s.unit})</option>`
+  ).join('');
+  return `<option value="">– Sensor wählen –</option>${opts}`;
+}
+
+// ── RENDER RULE CARD ──
+function renderRule(type, rule, idx) {
+  const sensors = type === 'temp' ? tempSensors : humiditySensors;
+  const unit = type === 'temp' ? '°C' : '%';
+  const defaultThreshold = type === 'temp' ? 24 : 65;
+  const isDisabled = !rule.enabled;
+
+  const modeOpts = MANUAL_MODES.map(m =>
+    `<option value="${m}" ${rule.mode === m ? 'selected' : ''}>${m}</option>`).join('');
+
+  const condOpts = `
+    <option value="above" ${rule.condition === 'above' ? 'selected' : ''}>Über Grenzwert (↑)</option>
+    <option value="below" ${rule.condition === 'below' ? 'selected' : ''}>Unter Grenzwert (↓)</option>`;
+
+  const areaChips = Array.from({length: NUM_AREAS}, (_, i) => {
+    const a = i + 1;
+    const sel = (rule.areas || []).includes(a) ? 'selected' : '';
+    return `<label class="area-chip ${sel}" onclick="toggleArea('${type}',${idx},${a},this)">
+      <input type="checkbox" ${sel ? 'checked' : ''}> Bereich ${a}
+    </label>`;
+  }).join('');
+
+  return `
+  <div class="rule-card ${isDisabled ? 'disabled' : ''}" id="rule-${type}-${idx}">
+    <div class="rule-card-header">
+      <div class="rule-number">${idx + 1}</div>
+      <input class="rule-name-input" type="text" value="${escHtml(rule.name || '')}"
+        placeholder="${type === 'temp' ? 'z.B. Wohnzimmer zu warm' : 'z.B. Bad zu feucht'}"
+        oninput="setRule('${type}',${idx},'name',this.value)">
+      <label class="toggle-switch" title="${isDisabled ? 'Aktivieren' : 'Deaktivieren'}">
+        <input type="checkbox" ${rule.enabled ? 'checked' : ''}
+          onchange="setRule('${type}',${idx},'enabled',this.checked); document.getElementById('rule-${type}-${idx}').classList.toggle('disabled',!this.checked)">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+      <button class="icon-btn danger" onclick="deleteRule('${type}',${idx})" title="Löschen">🗑</button>
+    </div>
+    <div class="rule-card-body">
+      <div class="grid-2 field">
+        <div>
+          <label class="field-label">Sensor</label>
+          <select class="ha-select" onchange="setRule('${type}',${idx},'sensor',this.value)">
+            ${buildSensorOptions(sensors, rule.sensor)}
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Bedingung</label>
+          <select class="ha-select" onchange="setRule('${type}',${idx},'condition',this.value)">
+            ${condOpts}
+          </select>
+        </div>
+      </div>
+      <div class="grid-2 field">
+        <div>
+          <label class="field-label">Grenzwert (${unit})</label>
+          <input type="number" class="ha-input" value="${rule.threshold ?? defaultThreshold}" step="0.5"
+            placeholder="${defaultThreshold}"
+            oninput="setRule('${type}',${idx},'threshold',parseFloat(this.value)||0)">
+        </div>
+        <div>
+          <label class="field-label">Lüftungsstufe aktivieren</label>
+          <select class="ha-select" onchange="setRule('${type}',${idx},'mode',this.value)">
+            ${modeOpts}
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Betroffene Bereiche</label>
+        <div class="chips-wrap">${areaChips}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── RENDER ALL ──
+function renderAll() {
+  ['temp', 'humidity'].forEach(type => {
+    const key = type === 'temp' ? 'temp_rules' : 'humidity_rules';
+    const list = document.getElementById(`${type}-list`);
+    if (rules[key].length === 0) {
+      list.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">${type === 'temp' ? '🌡️' : '💧'}</div>
+        <p>Keine Regeln vorhanden.<br>Füge eine Regel hinzu um zu starten.</p>
+      </div>`;
+    } else {
+      list.innerHTML = rules[key].map((r, i) => renderRule(type, r, i)).join('');
+    }
+  });
+
+  // Night mode
+  const nm = rules.night_mode;
+  document.getElementById('night-enabled').checked = nm.enabled;
+  document.getElementById('night-start').value = nm.start || '22:00';
+  document.getElementById('night-end').value = nm.end || '07:00';
+
+  const nightModeSelect = document.getElementById('night-mode-select');
+  nightModeSelect.innerHTML = MANUAL_MODES.map(m =>
+    `<option value="${m}" ${nm.mode === m ? 'selected' : ''}>${m}</option>`).join('');
+
+  const nightChips = document.getElementById('night-areas-chips');
+  nightChips.innerHTML = Array.from({length: NUM_AREAS}, (_, i) => {
+    const a = i + 1;
+    const sel = (nm.areas || []).includes(a) ? 'selected' : '';
+    return `<label class="area-chip ${sel}" onclick="toggleNightArea(${a}, this)">
+      <input type="checkbox" ${sel ? 'checked' : ''}> Bereich ${a}
+    </label>`;
+  }).join('');
+}
+
+// ── MUTATIONS ──
+function setRule(type, idx, field, value) {
+  const key = type === 'temp' ? 'temp_rules' : 'humidity_rules';
+  rules[key][idx][field] = value;
+}
+
+function toggleArea(type, idx, area, el) {
+  const key = type === 'temp' ? 'temp_rules' : 'humidity_rules';
+  let areas = rules[key][idx].areas || [];
+  const isSelected = el.classList.contains('selected');
+  if (isSelected) {
+    areas = areas.filter(a => a !== area);
+    el.classList.remove('selected');
+  } else {
+    if (!areas.includes(area)) areas.push(area);
+    el.classList.add('selected');
+  }
+  rules[key][idx].areas = areas;
+}
+
+function toggleNightArea(area, el) {
+  let areas = rules.night_mode.areas || [];
+  const isSelected = el.classList.contains('selected');
+  if (isSelected) {
+    areas = areas.filter(a => a !== area);
+    el.classList.remove('selected');
+  } else {
+    if (!areas.includes(area)) areas.push(area);
+    el.classList.add('selected');
+  }
+  rules.night_mode.areas = areas;
+}
+
+function addRule(type) {
+  const key = type === 'temp' ? 'temp_rules' : 'humidity_rules';
+  rules[key].push({
+    name: '', sensor: '',
+    condition: 'above',
+    threshold: type === 'temp' ? 24 : 65,
+    mode: 'Manual 3',
+    areas: [],
+    enabled: true
+  });
+  renderAll();
+  // Scroll to new rule
+  const list = document.getElementById(`${type}-list`);
+  list.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function deleteRule(type, idx) {
+  const key = type === 'temp' ? 'temp_rules' : 'humidity_rules';
+  rules[key].splice(idx, 1);
+  renderAll();
+}
+
+// ── SAVE ──
+async function saveRules() {
+  // Collect night mode from UI
+  rules.night_mode.enabled = document.getElementById('night-enabled').checked;
+  rules.night_mode.start = document.getElementById('night-start').value;
+  rules.night_mode.end = document.getElementById('night-end').value;
+  rules.night_mode.mode = document.getElementById('night-mode-select').value;
+
+  const btn = document.getElementById('save-btn');
+  btn.classList.add('saving');
+  btn.textContent = '⏳ Speichern...';
+
+  try {
+    const token = getToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    };
+    const res = await fetch('/api/services/lueftung/save_rules', {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify(rules)
+    });
+    if (!res.ok) throw new Error(res.status);
+    showToast('✓ Regeln gespeichert', 'success');
+  } catch(e) {
+    showToast('⚠️ Fehler beim Speichern – prüfe die Logs', 'error');
+  } finally {
+    btn.classList.remove('saving');
+    btn.innerHTML = '<span>💾</span> Speichern';
+  }
+}
+
+// ── TOAST ──
+let toastTimer;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── INIT ──
+async function init() {
+  await Promise.all([loadSensors(), loadRules()]);
+  renderAll();
+}
+
+init();
+</script>
+</body>
+</html>
