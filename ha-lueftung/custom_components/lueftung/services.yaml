@@ -1,0 +1,16 @@
+save_rules:
+  name: Lüftungsregeln speichern
+  description: Speichert Automatisierungsregeln für die Lüftungssteuerung.
+  fields:
+    temp_rules:
+      name: Temperatur-Regeln
+      description: Liste der Temperatur-Automatisierungsregeln
+      required: false
+    humidity_rules:
+      name: Feuchtigkeits-Regeln
+      description: Liste der Feuchtigkeits-Automatisierungsregeln
+      required: false
+    night_mode:
+      name: Nachtmodus
+      description: Konfiguration des Nachtmodus
+      required: false

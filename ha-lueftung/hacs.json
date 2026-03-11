@@ -1,0 +1,6 @@
+{
+  "name": "Lüftungssteuerung",
+  "domains": ["select"],
+  "iot_class": "cloud_polling",
+  "homeassistant": "2023.1.0"
+}
