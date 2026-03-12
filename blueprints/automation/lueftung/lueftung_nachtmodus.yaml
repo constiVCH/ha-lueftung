@@ -1,0 +1,163 @@
+blueprint:
+  name: "Lüftung – Nachtmodus"
+  description: >
+    Aktiviert einen ruhigen Lüftungsmodus während der Nacht und stellt danach
+    den gewünschten Tagmodus wieder ein. Zeitfenster und Bereiche sind frei wählbar.
+  domain: automation
+  input:
+    night_start:
+      name: Nacht beginnt um
+      description: Uhrzeit ab der der Nachtmodus aktiv ist
+      default: "22:00:00"
+      selector:
+        time:
+
+    night_end:
+      name: Nacht endet um
+      description: Uhrzeit ab der wieder der Tagmodus gilt
+      default: "07:00:00"
+      selector:
+        time:
+
+    night_mode:
+      name: Nacht-Lüftungsstufe
+      description: Modus während der Nacht
+      default: "Manual 1"
+      selector:
+        select:
+          options:
+            - "Fans off"
+            - "Manual 1"
+            - "Manual 2"
+            - "Manual 3"
+
+    day_mode:
+      name: Tag-Lüftungsstufe
+      description: Modus tagsüber (nach der Nacht)
+      default: "Fans off"
+      selector:
+        select:
+          options:
+            - "Fans off"
+            - "Manual 1"
+            - "Manual 2"
+            - "Manual 3"
+            - "Manual 4"
+            - "Manual 5"
+            - "Manual 6"
+
+    area_1:
+      name: Bereich 1 steuern?
+      default: false
+      selector:
+        boolean:
+
+    area_2:
+      name: Bereich 2 steuern?
+      default: false
+      selector:
+        boolean:
+
+    area_3:
+      name: Bereich 3 steuern?
+      default: false
+      selector:
+        boolean:
+
+    area_4:
+      name: Bereich 4 steuern?
+      default: false
+      selector:
+        boolean:
+
+    area_5:
+      name: Bereich 5 steuern?
+      default: false
+      selector:
+        boolean:
+
+    area_6:
+      name: Bereich 6 steuern?
+      default: false
+      selector:
+        boolean:
+
+variables:
+  night_mode: !input night_mode
+  day_mode: !input day_mode
+  area_1: !input area_1
+  area_2: !input area_2
+  area_3: !input area_3
+  area_4: !input area_4
+  area_5: !input area_5
+  area_6: !input area_6
+
+trigger:
+  - platform: time
+    at: !input night_start
+    id: "nacht_start"
+  - platform: time
+    at: !input night_end
+    id: "nacht_ende"
+
+condition: []
+
+action:
+  - variables:
+      target_mode: "{{ night_mode if trigger.id == 'nacht_start' else day_mode }}"
+
+  - if:
+      - condition: template
+        value_template: "{{ area_1 }}"
+    then:
+      - service: lueftung.set_mode
+        data:
+          area_id: 1
+          mode: "{{ target_mode }}"
+
+  - if:
+      - condition: template
+        value_template: "{{ area_2 }}"
+    then:
+      - service: lueftung.set_mode
+        data:
+          area_id: 2
+          mode: "{{ target_mode }}"
+
+  - if:
+      - condition: template
+        value_template: "{{ area_3 }}"
+    then:
+      - service: lueftung.set_mode
+        data:
+          area_id: 3
+          mode: "{{ target_mode }}"
+
+  - if:
+      - condition: template
+        value_template: "{{ area_4 }}"
+    then:
+      - service: lueftung.set_mode
+        data:
+          area_id: 4
+          mode: "{{ target_mode }}"
+
+  - if:
+      - condition: template
+        value_template: "{{ area_5 }}"
+    then:
+      - service: lueftung.set_mode
+        data:
+          area_id: 5
+          mode: "{{ target_mode }}"
+
+  - if:
+      - condition: template
+        value_template: "{{ area_6 }}"
+    then:
+      - service: lueftung.set_mode
+        data:
+          area_id: 6
+          mode: "{{ target_mode }}"
+
+mode: single
