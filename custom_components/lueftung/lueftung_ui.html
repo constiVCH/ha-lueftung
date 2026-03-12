@@ -501,44 +501,54 @@ function getTokenSync() {
 
 // ── LOAD SENSORS FROM HA ──
 async function loadSensors() {
+  // Sensoren aus dem von der Integration publizierten HA State lesen
+  // Dieser Endpunkt ist im iframe ohne Token erreichbar (same-origin)
+  const endpoints = [
+    '/api/states/lueftung.available_sensors',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const attrs = data.attributes || {};
+      if (attrs.temperature || attrs.humidity) {
+        tempSensors = attrs.temperature || [];
+        humiditySensors = attrs.humidity || [];
+        if (tempSensors.length === 0 && humiditySensors.length === 0) {
+          showToast('Keine Temperatur/Feuchtigkeitssensoren in HA gefunden', 'error');
+        }
+        return; // Erfolg
+      }
+    } catch(e) {
+      console.warn('Fehler beim Laden von', url, e);
+    }
+  }
+
+  // Fallback: Token-Dialog anzeigen und direkt /api/states abfragen
+  showToast('Sensoren konnten nicht automatisch geladen werden', 'error');
+  showTokenDialog();
+}
+
+async function loadSensorsWithToken(token) {
   try {
-    // Token holen – zuerst sync, dann async als Fallback
-    let token = getTokenSync();
-    if (!token) token = await getToken();
-
-    const headers = token
-      ? { Authorization: `Bearer ${token}` }
-      : {};
-
     const res = await fetch('/api/states', {
-      headers,
+      headers: { Authorization: `Bearer ${token}` },
       credentials: 'include'
     });
-
-    if (res.status === 401) {
-      showToast('⚠️ Keine Berechtigung – bitte HA neu laden', 'error');
-      return;
-    }
-    if (!res.ok) throw new Error(res.status);
+    if (!res.ok) { showToast('Token ungültig – bitte prüfen', 'error'); return; }
     const states = await res.json();
-
     tempSensors = states
       .filter(s => s.attributes.device_class === 'temperature')
       .map(s => ({ id: s.entity_id, name: s.attributes.friendly_name || s.entity_id, state: s.state, unit: s.attributes.unit_of_measurement || '°C' }))
       .sort((a,b) => a.name.localeCompare(b.name));
-
     humiditySensors = states
       .filter(s => s.attributes.device_class === 'humidity')
       .map(s => ({ id: s.entity_id, name: s.attributes.friendly_name || s.entity_id, state: s.state, unit: s.attributes.unit_of_measurement || '%' }))
       .sort((a,b) => a.name.localeCompare(b.name));
-
-    if (tempSensors.length === 0 && humiditySensors.length === 0) {
-      showToast('Keine Temperatur/Feuchtigkeitssensoren gefunden', 'error');
-    }
-
   } catch(e) {
-    console.warn('Sensoren konnten nicht geladen werden:', e);
-    showToast('Sensoren konnten nicht geladen werden – bitte Seite neu laden', 'error');
+    showToast('Fehler beim Laden der Sensoren', 'error');
   }
 }
 
@@ -793,12 +803,9 @@ function escHtml(str) {
 async function init() {
   await Promise.all([loadSensors(), loadRules()]);
   renderAll();
-
-  // Falls immer noch keine Sensoren: Token-Eingabe anzeigen
-  if (tempSensors.length === 0 && humiditySensors.length === 0) {
-    showTokenDialog();
-  }
 }
+
+init();
 
 function showTokenDialog() {
   const existing = document.getElementById('token-dialog');
@@ -831,7 +838,8 @@ async function applyToken() {
   if (!token) return;
   sessionStorage.setItem('ha_lueftung_token', token);
   document.getElementById('token-dialog')?.remove();
-  await Promise.all([loadSensors(), loadRules()]);
+  await loadSensorsWithToken(token);
+  await loadRules();
   renderAll();
 }
 </script>

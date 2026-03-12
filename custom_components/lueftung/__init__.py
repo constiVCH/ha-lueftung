@@ -77,6 +77,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Initial State setzen
     hass.states.async_set(f"{DOMAIN}.rules_state", "ok", engine.rules)
 
+    # Verfügbare Sensoren als HA State publizieren (wird von der UI gelesen)
+    async def _publish_sensors():
+        temp = []
+        humidity = []
+        for state in hass.states.async_all():
+            dc = state.attributes.get("device_class")
+            name = state.attributes.get("friendly_name") or state.entity_id
+            unit = state.attributes.get("unit_of_measurement") or ""
+            entry = {"id": state.entity_id, "name": name, "state": state.state, "unit": unit}
+            if dc == "temperature":
+                temp.append(entry)
+            elif dc == "humidity":
+                humidity.append(entry)
+        hass.states.async_set(f"{DOMAIN}.available_sensors", "ok", {
+            "temperature": sorted(temp, key=lambda x: x["name"]),
+            "humidity": sorted(humidity, key=lambda x: x["name"]),
+        })
+
+    await _publish_sensors()
+
+    # Sensoren alle 5 Minuten aktualisieren
+    async_track_time_interval(hass, lambda _: hass.async_create_task(_publish_sensors()), timedelta(minutes=5))
+
     return True
 
 
