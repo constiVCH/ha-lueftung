@@ -1,14 +1,22 @@
 blueprint:
   name: "Lüftung – Temperatursteuerung"
   description: >
-    Steuert Lüftungsbereiche automatisch basierend auf einem Temperatursensor.
-    Aktiviert einen wählbaren Modus wenn der Grenzwert über- oder unterschritten wird.
-    Deaktiviert die Lüftung wieder wenn der Grenzwert nicht mehr erreicht wird.
+    Steuert Lüftungsbereiche basierend auf einem Temperatursensor.
+    Nur aktiv wenn der Lüftungsmodus-Schalter auf "Temperatursteuerung" steht.
   domain: automation
   input:
+    mode_selector:
+      name: Lüftungsmodus-Schalter
+      description: >
+        Der input_select der den aktiven Modus steuert.
+        Erstelle unter Einstellungen → Helfer → Auswahlliste einen Helfer mit den
+        Optionen: Aus, Temperatursteuerung, Feuchtigkeitssteuerung, Nachtmodus
+      selector:
+        entity:
+          domain: input_select
+
     temperature_sensor:
       name: Temperatursensor
-      description: Sensor der die Temperatur misst
       selector:
         entity:
           domain: sensor
@@ -16,7 +24,6 @@ blueprint:
 
     threshold:
       name: Grenzwert (°C)
-      description: Bei Über- oder Unterschreitung wird die Lüftung aktiviert
       default: 24
       selector:
         number:
@@ -28,7 +35,6 @@ blueprint:
 
     condition:
       name: Bedingung
-      description: Wann soll die Lüftung aktiviert werden?
       default: "above"
       selector:
         select:
@@ -39,8 +45,7 @@ blueprint:
               value: "below"
 
     active_mode:
-      name: Aktiver Modus
-      description: Lüftungsstufe wenn Grenzwert erreicht ist
+      name: Lüftungsstufe wenn aktiv
       default: "Manual 3"
       selector:
         select:
@@ -54,8 +59,7 @@ blueprint:
             - "Boost ventilation"
 
     inactive_mode:
-      name: Inaktiver Modus
-      description: Lüftungsstufe wenn Grenzwert nicht erreicht ist
+      name: Lüftungsstufe wenn inaktiv
       default: "Fans off"
       selector:
         select:
@@ -70,31 +74,26 @@ blueprint:
       default: false
       selector:
         boolean:
-
     area_2:
       name: Bereich 2 steuern?
       default: false
       selector:
         boolean:
-
     area_3:
       name: Bereich 3 steuern?
       default: false
       selector:
         boolean:
-
     area_4:
       name: Bereich 4 steuern?
       default: false
       selector:
         boolean:
-
     area_5:
       name: Bereich 5 steuern?
       default: false
       selector:
         boolean:
-
     area_6:
       name: Bereich 6 steuern?
       default: false
@@ -112,76 +111,54 @@ variables:
   area_4: !input area_4
   area_5: !input area_5
   area_6: !input area_6
+  mode_selector: !input mode_selector
 
 trigger:
   - platform: state
     entity_id: !input temperature_sensor
+  - platform: state
+    entity_id: !input mode_selector
 
-condition: []
+condition:
+  - condition: template
+    value_template: "{{ states(mode_selector) == 'Temperatursteuerung' }}"
 
 action:
   - variables:
       current_temp: "{{ states(trigger.entity_id) | float(0) }}"
+      sensor_val: "{{ states(!input temperature_sensor) | float(0) }}"
       is_triggered: >
+        {% set val = states(!input temperature_sensor) | float(0) %}
         {% if condition == 'above' %}
-          {{ current_temp > threshold }}
+          {{ val > threshold }}
         {% else %}
-          {{ current_temp < threshold }}
+          {{ val < threshold }}
         {% endif %}
       target_mode: "{{ active_mode if is_triggered else inactive_mode }}"
 
-  - if:
-      - condition: template
-        value_template: "{{ area_1 }}"
-    then:
-      - service: lueftung.set_mode
-        data:
-          area_id: 1
-          mode: "{{ target_mode }}"
-
-  - if:
-      - condition: template
-        value_template: "{{ area_2 }}"
-    then:
-      - service: lueftung.set_mode
-        data:
-          area_id: 2
-          mode: "{{ target_mode }}"
-
-  - if:
-      - condition: template
-        value_template: "{{ area_3 }}"
-    then:
-      - service: lueftung.set_mode
-        data:
-          area_id: 3
-          mode: "{{ target_mode }}"
-
-  - if:
-      - condition: template
-        value_template: "{{ area_4 }}"
-    then:
-      - service: lueftung.set_mode
-        data:
-          area_id: 4
-          mode: "{{ target_mode }}"
-
-  - if:
-      - condition: template
-        value_template: "{{ area_5 }}"
-    then:
-      - service: lueftung.set_mode
-        data:
-          area_id: 5
-          mode: "{{ target_mode }}"
-
-  - if:
-      - condition: template
-        value_template: "{{ area_6 }}"
-    then:
-      - service: lueftung.set_mode
-        data:
-          area_id: 6
-          mode: "{{ target_mode }}"
+  - repeat:
+      for_each:
+        - area: 1
+          enabled: "{{ area_1 }}"
+        - area: 2
+          enabled: "{{ area_2 }}"
+        - area: 3
+          enabled: "{{ area_3 }}"
+        - area: 4
+          enabled: "{{ area_4 }}"
+        - area: 5
+          enabled: "{{ area_5 }}"
+        - area: 6
+          enabled: "{{ area_6 }}"
+      sequence:
+        - if:
+            - condition: template
+              value_template: "{{ repeat.item.enabled }}"
+          then:
+            - service: lueftung.set_mode
+              data:
+                area_id: "{{ repeat.item.area }}"
+                mode: "{{ target_mode }}"
 
 mode: single
+max_exceeded: silent
