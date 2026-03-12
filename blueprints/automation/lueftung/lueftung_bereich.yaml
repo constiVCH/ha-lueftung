@@ -1,0 +1,210 @@
+blueprint:
+  name: "Lüftung – Bereichssteuerung"
+  description: >
+    Steuert einen einzelnen Lüftungsbereich per Modus-Schalter.
+    Wähle pro Bereich ob Temperatur- oder Feuchtigkeitssteuerung aktiv sein soll.
+    Der Nachtmodus wird separat über einen globalen Schalter gesteuert und hat Vorrang.
+  domain: automation
+  input:
+    mode_selector:
+      name: Modus-Schalter für diesen Bereich
+      description: >
+        input_select mit den Optionen: Aus, Temperatursteuerung, Feuchtigkeitssteuerung.
+        Erstelle einen solchen Helfer pro Bereich unter Einstellungen → Helfer → Auswahlliste.
+      selector:
+        entity:
+          domain: input_select
+
+    night_switch:
+      name: Globaler Nachtmodus-Schalter
+      description: >
+        input_boolean der den Nachtmodus für alle Bereiche aktiviert.
+        Einmalig erstellen unter Einstellungen → Helfer → Schalter.
+      selector:
+        entity:
+          domain: input_boolean
+
+    area_id:
+      name: Bereichsnummer
+      description: Welcher Lüftungsbereich soll gesteuert werden? (1-6)
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+
+    temperature_sensor:
+      name: Temperatursensor
+      description: Wird für die Temperatursteuerung verwendet
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+
+    humidity_sensor:
+      name: Feuchtigkeitssensor
+      description: Wird für die Feuchtigkeitssteuerung verwendet
+      selector:
+        entity:
+          domain: sensor
+          device_class: humidity
+
+    temp_threshold:
+      name: Temperatur-Grenzwert (°C)
+      default: 24
+      selector:
+        number:
+          min: -20
+          max: 60
+          step: 0.5
+          unit_of_measurement: "°C"
+          mode: slider
+
+    temp_condition:
+      name: Temperatur-Bedingung
+      default: "above"
+      selector:
+        select:
+          options:
+            - label: "Über dem Grenzwert (zu warm)"
+              value: "above"
+            - label: "Unter dem Grenzwert (zu kalt)"
+              value: "below"
+
+    temp_active_mode:
+      name: Lüftungsstufe bei Temperatur aktiv
+      default: "Manual 3"
+      selector:
+        select:
+          options:
+            - "Manual 1"
+            - "Manual 2"
+            - "Manual 3"
+            - "Manual 4"
+            - "Manual 5"
+            - "Manual 6"
+            - "Boost ventilation"
+
+    humid_threshold:
+      name: Feuchtigkeits-Grenzwert (%)
+      default: 65
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+          mode: slider
+
+    humid_condition:
+      name: Feuchtigkeits-Bedingung
+      default: "above"
+      selector:
+        select:
+          options:
+            - label: "Über dem Grenzwert (zu feucht)"
+              value: "above"
+            - label: "Unter dem Grenzwert (zu trocken)"
+              value: "below"
+
+    humid_active_mode:
+      name: Lüftungsstufe bei Feuchtigkeit aktiv
+      default: "Manual 3"
+      selector:
+        select:
+          options:
+            - "Manual 1"
+            - "Manual 2"
+            - "Manual 3"
+            - "Manual 4"
+            - "Manual 5"
+            - "Manual 6"
+            - "Humidity regulation"
+            - "Boost ventilation"
+
+    inactive_mode:
+      name: Lüftungsstufe wenn inaktiv (Modus = Aus)
+      default: "Fans off"
+      selector:
+        select:
+          options:
+            - "Fans off"
+            - "Manual 1"
+            - "Manual 2"
+            - "Manual 3"
+
+    night_mode:
+      name: Nacht-Lüftungsstufe
+      description: Wird bei aktivem Nachtmodus gesetzt (hat Vorrang vor allem anderen)
+      default: "Manual 1"
+      selector:
+        select:
+          options:
+            - "Fans off"
+            - "Manual 1"
+            - "Manual 2"
+            - "Manual 3"
+
+variables:
+  mode_selector: !input mode_selector
+  night_switch: !input night_switch
+  area_id: !input area_id
+  temp_threshold: !input temp_threshold
+  temp_condition: !input temp_condition
+  temp_active_mode: !input temp_active_mode
+  humid_threshold: !input humid_threshold
+  humid_condition: !input humid_condition
+  humid_active_mode: !input humid_active_mode
+  inactive_mode: !input inactive_mode
+  night_mode: !input night_mode
+  temperature_sensor: !input temperature_sensor
+  humidity_sensor: !input humidity_sensor
+
+trigger:
+  - platform: state
+    entity_id: !input mode_selector
+  - platform: state
+    entity_id: !input night_switch
+  - platform: state
+    entity_id: !input temperature_sensor
+  - platform: state
+    entity_id: !input humidity_sensor
+
+condition: []
+
+action:
+  - variables:
+      is_night: "{{ is_state(night_switch, 'on') }}"
+      current_mode: "{{ states(mode_selector) }}"
+      temp_val: "{{ states(temperature_sensor) | float(0) }}"
+      humid_val: "{{ states(humidity_sensor) | float(0) }}"
+      temp_triggered: >
+        {% if temp_condition == 'above' %}
+          {{ temp_val > temp_threshold }}
+        {% else %}
+          {{ temp_val < temp_threshold }}
+        {% endif %}
+      humid_triggered: >
+        {% if humid_condition == 'above' %}
+          {{ humid_val > humid_threshold }}
+        {% else %}
+          {{ humid_val < humid_threshold }}
+        {% endif %}
+      target_mode: >
+        {% if is_night %}
+          {{ night_mode }}
+        {% elif current_mode == 'Temperatursteuerung' %}
+          {{ temp_active_mode if temp_triggered else inactive_mode }}
+        {% elif current_mode == 'Feuchtigkeitssteuerung' %}
+          {{ humid_active_mode if humid_triggered else inactive_mode }}
+        {% else %}
+          {{ inactive_mode }}
+        {% endif %}
+
+  - service: lueftung.set_mode
+    data:
+      area_id: "{{ area_id | int }}"
+      mode: "{{ target_mode }}"
+
+mode: single
+max_exceeded: silent
